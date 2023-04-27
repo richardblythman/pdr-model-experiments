@@ -1,0 +1,84 @@
+ACT001:
+Uses a time frame of 1m and 60 mins in the past. LR, LASSO and Baseline
+Baseline give the lower error. Baseline is a Maringale distribution such that
+x(t+1)/[x(t),x(t-1)...x(t-N)] = x(t+1)/x(t)
+
+ACT002:
+Repeats ACT001 but the prediction is the change in price (derivative)
+
+ACT003:
+Use different SMAs, Bollinger bands and RSI as features
+
+ACT004:
+Adds btc data for prediction. for small periods perfromance seems to be better than the baseline.
+Also the model seems to have information about the chnage in price, with accuracy of 56% predicting the sign of the change
+
+ACT005:
+Attempt to predict directly the sign of the change
+
+ACT006
+get data for eth and btc since 2017 (max available from binance)
+
+ACT007
+Simple linear regression to predict next ETH price value
+features are standard indicators given by "ta lib"
+score = MAE
+OLS 0.7278
+Baseline: 0.7247
+Lasso: 1.082
+
+Baseline is just using the current value as prediction for the next value
+Notice that this produces a lower (better) score than the models tested 
+
+ACT008
+Try to predict the direction of the change. this is a classification problem
+where the labels ar the sign of the difference of the price now and in the future
+that is, the labels are -1 or 1 indicating that the price goes down or up
+Keep the same features.
+
+For 1h data the results are
+y_h	        y_l	        y_c
+0.682293	0.699570	0.540750
+0.453838	0.555806	0.502445
+0.546162	0.444194	0.497555
+
+Showing that is possible to classify the direction of the changes
+for high and low, the direction of the close value classification is questionable and 
+randomization test is required to determine if the result is statistically significant
+
+using the 1m timeframe data
+y_h	        y_l	        y_c
+0.723721	0.728350	0.509283
+0.466143	0.529188	0.497734
+0.533857	0.470812	0.502266
+
+the accuracy is higher for high and low, but lower for the prediction
+of the direction of the close values
+
+ACT009
+Explore how the values open, high, low and volume are related to the close value
+The caveat is that either high and low could be also the close value, however if there is any relationship among those values
+it can be used later given that previous activities show that it is possible to 
+predict High and low easier than close.
+
+The prediction of close from the same interval paarmeters high, low, open and volume gives about
+MAE of 0.31 in the tet setment (10%) of the data, The MAE between close and open is 0.72
+
+ACT010 
+determine if having 100% knowledge of the direction of the price change has a positive effect on the prediction of the future prices
+Knowledge of the direction redice the rror in the estiomation of the close value by 30% compared to the base line
+the prediction of the high value is reduced about 40% compared to use the baseline. A similar result is observed for "low"
+
+Notice that invariably knowing the direction implies successful trades always, assuming that fees are not an issue
+
+ACT011
+Calcule the direction of the chnages and use it to determine the profit obtained using the available data
+Contaminate the directionprediction with different levels of noise, determine the accuracy and calculate the returns
+
+ACT012
+Can the direction of the close value be calculated from the other variables that are not the close price?
+results show 80%, while this is not predictive realistically it can be used in the case that the high or low values are easier to calculate
+
+ACT013
+Use a densely connected ANN with non linear activations to predict the direction of the change in the close values
+use 3 layers, which in theory would be able to model an arbitrary non-linear function given sufficient data
