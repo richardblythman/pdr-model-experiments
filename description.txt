@@ -82,3 +82,19 @@ results show 80%, while this is not predictive realistically it can be used in t
 ACT013
 Use a densely connected ANN with non linear activations to predict the direction of the change in the close values
 use 3 layers, which in theory would be able to model an arbitrary non-linear function given sufficient data
+
+ACT014
+Use a basic strategy based on sma and optimize for the parameters
+
+ACT015
+implement a classifier for each currency, use all the indicators and logistic regression with proper scaling
+use crossvalidation to obtain the average accuracy
+for 1h time frame btc accuracy 54.9%
+for 5m time frame btc accuracy 53.2%
+
+ACT016
+use the smae classifier as above and simulate naive trading
+but when the algorithmm predicts a positive change.
+use crossvalidation using continuous segments
+For this test take into considertaion short time contunous but disregard the continuite of the segments
+There will be 5 segments, leave one out and train of the rest

@@ -1,10 +1,12 @@
+# %%
 import ccxt
 import pandas as pd
 
 exchange = ccxt.binance()
 
-symbols = ["ETH/USDT", "BTC/USDT"]
-timeframe = "5m"
+symbols = ["XRP/USDT"]
+timeframe = "1h"
+delta_time = pd.DateOffset(minutes=5)
 start_date = "2017-09-01"
 end_date = "2023-04-19"
 
@@ -30,9 +32,10 @@ for symbol in symbols:
 
         data = pd.concat([data, df])
 
-        start_time = int(
-            (df.timestamp.iloc[-1] + pd.DateOffset(hours=1)).timestamp() * 1000
-        )
-        flag = df.timestamp.iloc[-1] <= pd.Timestamp(end_date, tz="UTC")
+        start_time = int((df.timestamp.iloc[-1] + delta_time).timestamp() * 1000)
+
+        flag = df.timestamp.iloc[-1] + delta_time <= pd.Timestamp(end_date, tz="UTC")
 
     data.to_csv(symbol[0:3] + "_" + timeframe + "_.csv", index=False)
+
+# %%
