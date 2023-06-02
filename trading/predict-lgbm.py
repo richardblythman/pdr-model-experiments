@@ -37,14 +37,21 @@ def get_time_features(df):
     return df
 
 def predict(df):
-    # Load model
-    model_name = "eth_5m"
-    with open(f"weights/{model_name}.pkl", "rb") as f:
-        model = pickle.load(f)    
+    # Load models
+    models = []
+    n_fold = 5
+    for split in range(n_fold):
+        model_name = f"weights/eth_5m_fold{split}.pkl"
+        models.append(pickle.load(open(model_name, "rb")))
 
-    predict = model.predict(df.iloc[-1]) # predict from last row
-    pred = predict.argmax(axis=1)[0]
-    conf = predict[:,1][0] 
+    pred_list = np.zeros((n_fold,))
+    conf_list = np.zeros((n_fold,))
+    for split in range(n_fold):
+        predict = models[split].predict(df.iloc[-1]) # predict from last row
+        pred_list[split] = predict.argmax(axis=1)[0]
+        conf_list[split] = predict[:,1][0] 
+    pred = np.median(pred_list, axis=0)    
+    conf = np.median(conf_list, axis=0)    
     
     return pred, conf
 
