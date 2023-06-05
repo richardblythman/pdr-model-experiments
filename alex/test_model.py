@@ -32,7 +32,7 @@ exchange_ccxt = exchange_class({
 
 
 ts_now=int( time.time() )
-results_csv_name='./results/'+str(ts_now)+".csv"
+results_csv_name='./results/'+exchange_id+"_"+models[0].pair+"_"+models[0].timeframe+"_"+str(ts_now)+".csv"
 
 columns_short = [
     "timestamp",
@@ -61,7 +61,7 @@ except:
 if size==0:
      with open(results_csv_name, 'a') as f:
         writer = csv.writer(f)
-        writer.writerow(columns_short)
+        writer.writerow(all_columns)
 
 #read initial set of candles
 candles = exchange_ccxt.fetch_ohlcv(pair, "5m")
@@ -96,8 +96,34 @@ while True:
         main_pd.loc[t,["Prediction_"+model.model_name]]=float(prediction)
     timestamp = main_pd.index.values[-2]
     if last_finalized_timestamp<timestamp:
-         last_finalized_timestamp = timestamp
-         
-    print(f"\n\n\n********* TAIL-ing *********")
+        last_finalized_timestamp = timestamp
+        should_write = False
+        for model in models:
+            prediction = main_pd.iloc[-2]["Prediction_"+model.model_name]
+            if not np.isnan(prediction):
+                should_write = True
+                match = False
+                if float(prediction)>0 and main_pd.iloc[-1]['close']>main_pd.iloc[-2]['close']:
+                    match=True
+                elif float(prediction)<1 and main_pd.iloc[-1]['close']<main_pd.iloc[-2]['close']:
+                    match=True
+                main_pd.loc[timestamp,["Prediction_"+model.model_name+"_match"]]=match
+        if should_write:
+            print(f"Write to csv: {main_pd.iloc[-2]}")
+            with open(results_csv_name, 'a') as f:
+                writer = csv.writer(f)
+                row = [
+                    main_pd.index.values[-2],
+                    main_pd.iloc[-2]['open'],
+                    main_pd.iloc[-2]["high"],
+                    main_pd.iloc[-2]["low"],
+                    main_pd.iloc[-2]["close"],
+                    main_pd.iloc[-2]["volume"],
+                ]
+                for model in models:
+                     row.append(main_pd.iloc[-2]["Prediction_"+model.model_name])
+                     row.append(main_pd.iloc[-2]["Prediction_"+model.model_name+"_match"])
+                writer.writerow(row)
+    print(f"\n\n\n********* TAIL-ing to {results_csv_name} *********")
     print(main_pd.tail(15))
     time.sleep(20)
