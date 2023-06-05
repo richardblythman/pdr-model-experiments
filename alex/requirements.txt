@@ -1,0 +1,11 @@
+numpy
+pandas
+pandas-ta
+python-kucoin
+python-binance
+ccxt
+TA-Lib
+psycopg2-binary
+matplotlib
+tabulate
+plotly

@@ -19,9 +19,10 @@ import seaborn as sns
 
 
 class RichardModel1:
-    def __init__(self,pair,timeframe):
+    def __init__(self,exchange,pair,timeframe):
         self.model_name=self.__class__.__name__
         self.model = None
+        self.exchange = exchange.lower()
         self.pair = pair
         self.timeframe = timeframe
     
@@ -130,12 +131,12 @@ class RichardModel1:
         return yhat   
 
     def pickle_model(self,path):
-        model_name=path+"/"+self.pair+"_"+self.timeframe+".pkl"
+        model_name=path+"/"+self.exchange+"_"+self.pair+"_"+self.timeframe+".pkl"
         with open(model_name, "wb") as f:
             pickle.dump(self.model, f)
     
     def unpickle_model(self,path):
-        model_name=path+"/"+self.pair+"_"+self.timeframe+".pkl"
+        model_name=path+"/"+self.exchange+"_"+self.pair+"_"+self.timeframe+".pkl"
         with open(model_name, "rb") as f:
             self.model = pickle.load(f)
 
