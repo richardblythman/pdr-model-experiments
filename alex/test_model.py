@@ -15,6 +15,9 @@ warnings.filterwarnings("ignore")
 exchange_id = 'binance'
 pair='BTC/TUSD'
 timeframe='5m'
+
+
+## EDIT ME
 models = [
     JaimeModel1(exchange_id,pair,timeframe)
 ]
