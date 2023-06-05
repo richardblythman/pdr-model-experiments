@@ -6,8 +6,9 @@ import pickle
 import ta
     
 def get_ta_features(df):  
-    df = ta.add_all_ta_features(
-        df,
+    df_features = df.copy()
+    ta.add_all_ta_features(
+        df_features,
         open="open",
         high="high",
         low="low",
@@ -15,7 +16,7 @@ def get_ta_features(df):
         volume="volume",
         fillna=True,
     )
-    return df
+    return df_features
     
 def get_time_features(df):
     df = df.assign(sin_month=np.zeros(len(df)), cos_month=np.zeros(len(df)), sin_day=np.zeros(len(df)), cos_day=np.zeros(len(df)), sin_hour=np.zeros(len(df)), cos_hour=np.zeros(len(df)), sin_minute=np.zeros(len(df)), cos_minute=np.zeros(len(df)),)
