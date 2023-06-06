@@ -23,7 +23,7 @@ class RichardModel1:
         self.model_name=self.__class__.__name__
         self.model = None
         self.exchange = exchange.lower()
-        self.pair = pair
+        self.pair = pair.replace("/", "-").lower()
         self.timeframe = timeframe
     
     def add_ta(self,dataframe):
@@ -42,6 +42,7 @@ class RichardModel1:
             fillna=True,
         )
         df = self.get_time_features(df)
+        df = df.drop(["timestamp"], axis=1)
         return df
 
     def get_time_features(self,df):
@@ -128,6 +129,7 @@ class RichardModel1:
     def predict(self,last_candles):
         main_pd = self.add_ta(last_candles)
         yhat = self.model.predict(main_pd.values[[-1], :])
+        yhat = yhat.argmax(axis=1)
         return yhat   
 
     def pickle_model(self,path):
@@ -136,11 +138,12 @@ class RichardModel1:
             pickle.dump(self.model, f)
     
     def unpickle_model(self,path):
-        model_name=path+"/"+self.exchange+"_"+self.pair+"_"+self.timeframe+".pkl"
-        with open(model_name, "rb") as f:
-            self.model = pickle.load(f)
-
-
+        models = []
+        n_fold = 5
+        for split in range(n_fold):
+            model_name = path+"/"+self.exchange+"_"+self.pair+"_"+self.timeframe+"_fold"+str(split)+".pkl"
+            models.append(pickle.load(open(model_name, "rb")))
+            self.model = models[0]
 
 
 
