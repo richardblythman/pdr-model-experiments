@@ -21,7 +21,7 @@ import seaborn as sns
 class RichardModel1:
     def __init__(self,exchange,pair,timeframe):
         self.model_name=self.__class__.__name__
-        self.model = []
+        self.model = [None] * 5
         self.n_fold = 5
         self.exchange = exchange.lower()
         self.pair = pair.replace("/", "-").lower()
@@ -76,24 +76,15 @@ class RichardModel1:
         data = data.dropna()
         print(data.tail(5))
         
-        x = data.drop(["y", "return", "timestamp"], axis=1)
+        x = data.drop(["y", "return"], axis=1)
         r = data["return"]
         y = data["y"]
         y[y <= 0] = 0
 
-        self.model = Pipeline(
-            steps=[
-                ("scaller", MaxAbsScaler()),
-                ("Predictor", LogisticRegression(max_iter=1000)),
-            ]
-        )
         features = list(x.columns )
-        nf = 5
-        kf = KFold(n_splits=nf)
-        pred_returns = np.zeros((nf,))
-        opt_returns = np.zeros((nf,))
-        timeframes = np.zeros((nf,))
-        scores = np.zeros((nf,))
+        kf = KFold(n_splits=self.n_fold)
+        pred_returns = np.zeros((self.n_fold,))
+        scores = np.zeros((self.n_fold,))
         importances = []
         params = {
             'early_stopping_rounds': 50,
@@ -101,29 +92,24 @@ class RichardModel1:
             'num_class': 2,
         }
 
-        for i, (ind_train, ind_test) in enumerate(kf.split(x)):
+        for split, (ind_train, ind_test) in enumerate(kf.split(x)):
             purge = 1
-            print(i)
             ind_test = ind_test[purge:-purge]
-            print(ind_test)
             train_dataset = lgb.Dataset(x.iloc[ind_train, :],
-                                y[ind_train].values, 
+                                y.iloc[ind_train].values, 
                                 feature_name = features, 
                                )
             val_dataset = lgb.Dataset(x.iloc[ind_test, :], 
-                              y[ind_test].values, 
+                              y.iloc[ind_test].values, 
                               feature_name = features, 
                              )
-            self.model = lgb.train(params = params,
+            self.model[split] = lgb.train(params = params,
                       train_set = train_dataset, 
                       valid_sets=[train_dataset, val_dataset],
                       valid_names=['tr', 'vl'],
                       num_boost_round = 5000,
                       verbose_eval = 100,     
-                      # feval = correlation,
                      )
-            importances.append(self.model.feature_importance(importance_type='gain'))
-
 
         
     
@@ -142,14 +128,15 @@ class RichardModel1:
         return pred   
 
     def pickle_model(self,path):
-        model_name=path+"/"+self.exchange+"_"+self.pair+"_"+self.timeframe+".pkl"
-        with open(model_name, "wb") as f:
-            pickle.dump(self.model, f)
+        for split in range(self.n_fold):
+            model_name = path+"/"+self.exchange+"_"+self.pair+"_"+self.timeframe+"_fold"+str(split)+"_test.pkl"
+            with open(model_name, "wb") as f:
+                pickle.dump(self.model[split], f)
     
     def unpickle_model(self,path):
         for split in range(self.n_fold):
             model_name = path+"/"+self.exchange+"_"+self.pair+"_"+self.timeframe+"_fold"+str(split)+".pkl"
-            self.model.append(pickle.load(open(model_name, "rb")))
+            self.model[split] = pickle.load(open(model_name, "rb"))
 
 
 
