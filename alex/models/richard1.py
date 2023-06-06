@@ -21,7 +21,8 @@ import seaborn as sns
 class RichardModel1:
     def __init__(self,exchange,pair,timeframe):
         self.model_name=self.__class__.__name__
-        self.model = None
+        self.model = []
+        self.n_fold = 5
         self.exchange = exchange.lower()
         self.pair = pair.replace("/", "-").lower()
         self.timeframe = timeframe
@@ -128,9 +129,17 @@ class RichardModel1:
     
     def predict(self,last_candles):
         main_pd = self.add_ta(last_candles)
-        yhat = self.model.predict(main_pd.values[[-1], :])
-        yhat = yhat.argmax(axis=1)
-        return yhat   
+
+        pred_list = np.zeros((self.n_fold,))
+        conf_list = np.zeros((self.n_fold,))
+        for split in range(self.n_fold):
+            predict = self.model[split].predict(main_pd.values[[-1], :]) 
+            pred_list[split] = predict.argmax(axis=1)[0]
+            conf_list[split] = predict[:,1][0] 
+        pred = np.median(pred_list, axis=0)    
+        conf = np.median(conf_list, axis=0)    
+
+        return pred   
 
     def pickle_model(self,path):
         model_name=path+"/"+self.exchange+"_"+self.pair+"_"+self.timeframe+".pkl"
@@ -138,12 +147,9 @@ class RichardModel1:
             pickle.dump(self.model, f)
     
     def unpickle_model(self,path):
-        models = []
-        n_fold = 5
-        for split in range(n_fold):
+        for split in range(self.n_fold):
             model_name = path+"/"+self.exchange+"_"+self.pair+"_"+self.timeframe+"_fold"+str(split)+".pkl"
-            models.append(pickle.load(open(model_name, "rb")))
-            self.model = models[0]
+            self.model.append(pickle.load(open(model_name, "rb")))
 
 
 
