@@ -129,13 +129,13 @@ class RichardModel1:
 
     def pickle_model(self,path):
         for split in range(self.n_fold):
-            model_name = path+"/"+self.exchange+"_"+self.pair+"_"+self.timeframe+"_fold"+str(split)+"_test.pkl"
+            model_name = path+"/"+self.model_name+"_"+self.exchange+"_"+self.pair+"_"+self.timeframe+"_fold"+str(split)+".pkl"
             with open(model_name, "wb") as f:
                 pickle.dump(self.model[split], f)
     
     def unpickle_model(self,path):
         for split in range(self.n_fold):
-            model_name = path+"/"+self.exchange+"_"+self.pair+"_"+self.timeframe+"_fold"+str(split)+".pkl"
+            model_name = path+"/"+self.model_name+"_"+self.exchange+"_"+self.pair+"_"+self.timeframe+"_fold"+str(split)+".pkl"
             self.model[split] = pickle.load(open(model_name, "rb"))
 
 

@@ -9,7 +9,10 @@ import time
 import pickle
 import csv 
 import warnings
-from models.jaime1 import JaimeModel1
+from datetime import datetime
+
+from models.OceanModel import OceanModel
+from models.richard1 import RichardModel1
 warnings.filterwarnings("ignore")
 
 exchange_id = 'binance'
@@ -19,7 +22,8 @@ timeframe='5m'
 
 ## EDIT ME
 models = [
-    JaimeModel1(exchange_id,pair,timeframe)
+    OceanModel(exchange_id,pair,timeframe),
+    RichardModel1(exchange_id,pair,timeframe)
 ]
     
 
@@ -42,12 +46,15 @@ columns_short = [
     "close",
     "volume"
 ]
-
+hits={}
+total_candles=0
 columns_models = []
 for model in models:
     model.unpickle_model("./trained_models")
-    columns_models.append("Prediction_"+model.model_name)
-    columns_models.append("Prediction_"+model.model_name+"_match")
+    columns_models.append(model.model_name)
+    columns_models.append(model.model_name+"_match")
+    columns_models.append(model.model_name+"_hits")
+    hits[model.model_name] = 0
 
 all_columns=columns_short+columns_models
 
@@ -93,13 +100,14 @@ while True:
         main_pd.loc[t,['volume']]=float(ohl[5])
     for model in models:
         prediction = model.predict(main_pd.drop(columns_models, axis=1))
-        main_pd.loc[t,["Prediction_"+model.model_name]]=float(prediction)
+        main_pd.loc[t,[model.model_name]]=float(prediction)
     timestamp = main_pd.index.values[-2]
     if last_finalized_timestamp<timestamp:
+        total_candles+=1
         last_finalized_timestamp = timestamp
         should_write = False
         for model in models:
-            prediction = main_pd.iloc[-2]["Prediction_"+model.model_name]
+            prediction = main_pd.iloc[-2][model.model_name]
             if not np.isnan(prediction):
                 should_write = True
                 match = False
@@ -107,7 +115,11 @@ while True:
                     match=True
                 elif float(prediction)<1 and main_pd.iloc[-1]['close']<main_pd.iloc[-2]['close']:
                     match=True
-                main_pd.loc[timestamp,["Prediction_"+model.model_name+"_match"]]=match
+                main_pd.loc[timestamp,[model.model_name+"_match"]]=match
+                if match:
+                    hits[model.model_name]+=1
+                # update hits
+                main_pd.loc[timestamp,[model.model_name+"_hits"]]=round(hits[model.model_name]/(total_candles-1),2)*100
         if should_write:
             print(f"Write to csv: {main_pd.iloc[-2]}")
             with open(results_csv_name, 'a') as f:
@@ -121,9 +133,10 @@ while True:
                     main_pd.iloc[-2]["volume"],
                 ]
                 for model in models:
-                     row.append(main_pd.iloc[-2]["Prediction_"+model.model_name])
-                     row.append(main_pd.iloc[-2]["Prediction_"+model.model_name+"_match"])
+                     row.append(main_pd.iloc[-2][model.model_name])
+                     row.append(main_pd.iloc[-2][model.model_name+"_match"])
+                     row.append(main_pd.iloc[-2][model.model_name+"_hits"])
                 writer.writerow(row)
-    print(f"\n\n\n********* TAIL-ing to {results_csv_name} *********")
+    print(f"\n\n\n********* Start: {datetime.fromtimestamp(ts_now)}, Candles closed so far: {total_candles-1} , results: {results_csv_name} *********")
     print(main_pd.tail(15))
     time.sleep(20)

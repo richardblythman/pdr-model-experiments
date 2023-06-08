@@ -87,14 +87,14 @@ class OceanModel:
 
     def pickle_model(self, path):
         model_name = (
-            path + "/" + self.exchange + "_" + self.pair + "_" + self.timeframe + ".pkl"
+            path + "/" + self.model_name+"_"+self.exchange + "_" + self.pair + "_" + self.timeframe + ".pkl"
         )
         with open(model_name, "wb") as f:
             pickle.dump(self.model, f)
 
     def unpickle_model(self, path):
         model_name = (
-            path + "/" + self.exchange + "_" + self.pair + "_" + self.timeframe + ".pkl"
+            path + "/" + self.model_name+"_"+self.exchange + "_" + self.pair + "_" + self.timeframe + ".pkl"
         )
         with open(model_name, "rb") as f:
             self.model = pickle.load(f)
