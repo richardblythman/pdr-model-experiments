@@ -202,7 +202,7 @@ while True:
                         "amount": min(order_size/last_price,max_buy_order_size)
                     }
                     current_orders[model.model_name]["spent"]=current_orders[model.model_name]["price"]*current_orders[model.model_name]["amount"]
-                    print(f"New order on {model.model_name}: Sold {current_orders[model.model_name]['amount']} at {current_orders[model.model_name]['price']}, got {current_orders[model.model_name]['spent']}")
+                    print(f"New order on {model.model_name}: Bought {current_orders[model.model_name]['amount']} at {current_orders[model.model_name]['price']}, got {current_orders[model.model_name]['spent']}")
                 else:
                     # we sell
                     max_sell_order_size = float(order_books["bids"][0][1])/2 # never buy more than half
@@ -213,7 +213,7 @@ while True:
                         "amount": min(order_size/last_price,max_sell_order_size)
                     }
                     current_orders[model.model_name]["spent"]=current_orders[model.model_name]["price"]*current_orders[model.model_name]["amount"]
-                    print(f"New order on {model.model_name}: Bought {current_orders[model.model_name]['amount']} at {current_orders[model.model_name]['price']}, spent {current_orders[model.model_name]['spent']}")
+                    print(f"New order on {model.model_name}: Sold {current_orders[model.model_name]['amount']} at {current_orders[model.model_name]['price']}, spent {current_orders[model.model_name]['spent']}")
     
     print(f"\n\n\n********* Start: {datetime.fromtimestamp(ts_now)}, Order size: {order_size} {quote_token}. Candles closed so far: {total_candles-1} , results: {results_csv_name} *********")
     
