@@ -15,18 +15,18 @@ from models.OceanModel import OceanModel
 from models.richard1 import RichardModel1
 warnings.filterwarnings("ignore")
 
+## EDIT ME
 exchange_id = 'binance'
 pair='BTC/TUSD'
 timeframe='5m'
 quote_token='TUSD'
 order_size=100  # order size, in quote token. IE: for BTC/TUSD, it's 100 TUSD
-
-## EDIT ME
+order_fee = 0.1 # fee, in percentage
 models = [
     OceanModel(exchange_id,pair,timeframe),
     RichardModel1(exchange_id,pair,timeframe)
 ]
-    
+## END EDIT ME    
 
 
 exchange_class = getattr(ccxt, exchange_id)
@@ -130,15 +130,19 @@ while True:
                 if current_orders[model.model_name]:
                     # if it was sell, we need to buy back
                     if current_orders[model.model_name]["direction"]==0:
-                        income = current_orders[model.model_name]["spent"]-last_price*current_orders[model.model_name]["amount"]
-                        total_profit[model.model_name]+=income
-                        print(f"Closing {model.model_name}: Bought back {current_orders[model.model_name]['amount']} at {last_price}, profit: {income}")
+                        income = last_price*current_orders[model.model_name]["amount"]
+                        income -= (income*order_fee/100)
+                        profit = current_orders[model.model_name]["spent"]-income
+                        total_profit[model.model_name]+=profit
+                        print(f"Closing {model.model_name}: Bought back {current_orders[model.model_name]['amount']} at {last_price}, profit: {profit}")
                     else: #if it was a buy order, we sell
-                        income = last_price*current_orders[model.model_name]["amount"]-current_orders[model.model_name]["spent"]
-                        total_profit[model.model_name]+=income
-                        print(f"Closing {model.model_name}: Sold {current_orders[model.model_name]['amount']} at {last_price}, profit: {income}")
+                        income = last_price*current_orders[model.model_name]["amount"]
+                        income -= (income*order_fee/100)
+                        profit = income-current_orders[model.model_name]["spent"]
+                        total_profit[model.model_name]+=profit
+                        print(f"Closing {model.model_name}: Sold {current_orders[model.model_name]['amount']} at {last_price}, profit: {profit}")
                     current_orders[model.model_name]=None
-                    main_pd.loc[timestamp,[model.model_name+"_p"]]=income
+                    main_pd.loc[timestamp,[model.model_name+"_p"]]=profit
                 main_pd.loc[timestamp,[model.model_name+"_tp"]]=total_profit[model.model_name]
         if should_write:
             with open(results_csv_name, 'a') as f:
