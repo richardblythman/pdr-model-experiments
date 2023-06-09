@@ -18,7 +18,8 @@ warnings.filterwarnings("ignore")
 exchange_id = 'binance'
 pair='BTC/TUSD'
 timeframe='5m'
-
+quote_token='TUSD'
+order_size=100  # order size, in quote token. IE: for BTC/TUSD, it's 100 TUSD
 
 ## EDIT ME
 models = [
@@ -47,14 +48,20 @@ columns_short = [
     "volume"
 ]
 hits={}
+total_profit={}
+current_orders={}
 total_candles=0
-columns_models = []
+columns_models = ['diff']  # percentage difference vs previous candle
 for model in models:
     model.unpickle_model("./trained_models")
-    columns_models.append(model.model_name)
-    columns_models.append(model.model_name+"_match")
-    columns_models.append(model.model_name+"_hits")
+    columns_models.append(model.model_name) # prediction column.  0 or 1
+    columns_models.append(model.model_name+"_m") # match column. IE: if prediction was right or not
+    columns_models.append(model.model_name+"_h") # hits   IE:  model accuracy over time
     hits[model.model_name] = 0
+    columns_models.append(model.model_name+"_p") # profit per candle
+    columns_models.append(model.model_name+"_tp") # total profits
+    total_profit[model.model_name] = 0
+    current_orders[model.model_name]=None
 
 all_columns=columns_short+columns_models
 
@@ -98,30 +105,42 @@ while True:
         main_pd.loc[t,['low']]=float(ohl[3])
         main_pd.loc[t,['high']]=float(ohl[2])
         main_pd.loc[t,['volume']]=float(ohl[5])
-    for model in models:
-        prediction = model.predict(main_pd.drop(columns_models, axis=1))
-        main_pd.loc[t,[model.model_name]]=float(prediction)
     timestamp = main_pd.index.values[-2]
+    last_price = main_pd.iloc[-1]['close']
     if last_finalized_timestamp<timestamp:
         total_candles+=1
         last_finalized_timestamp = timestamp
+        main_pd.loc[timestamp,["diff"]]=(main_pd.iloc[-2]['close']*100/main_pd.iloc[-3]['close'])-100
         should_write = False
         for model in models:
             prediction = main_pd.iloc[-2][model.model_name]
             if not np.isnan(prediction):
                 should_write = True
                 match = False
-                if float(prediction)>0 and main_pd.iloc[-1]['close']>main_pd.iloc[-2]['close']:
+                if float(prediction)>0 and main_pd.iloc[-2]['close']>main_pd.iloc[-3]['close']:
                     match=True
-                elif float(prediction)<1 and main_pd.iloc[-1]['close']<main_pd.iloc[-2]['close']:
+                elif float(prediction)<1 and main_pd.iloc[-2]['close']<main_pd.iloc[-3]['close']:
                     match=True
-                main_pd.loc[timestamp,[model.model_name+"_match"]]=match
+                main_pd.loc[timestamp,[model.model_name+"_m"]]=match
                 if match:
                     hits[model.model_name]+=1
                 # update hits
-                main_pd.loc[timestamp,[model.model_name+"_hits"]]=round(hits[model.model_name]/(total_candles-1),2)*100
+                main_pd.loc[timestamp,[model.model_name+"_h"]]=round(hits[model.model_name]/(total_candles-1),4)*100
+                # if we have an order, close it
+                if current_orders[model.model_name]:
+                    # if it was sell, we need to buy back
+                    if current_orders[model.model_name]["direction"]==0:
+                        income = current_orders[model.model_name]["spent"]-last_price*current_orders[model.model_name]["amount"]
+                        total_profit[model.model_name]+=income
+                        print(f"Closing {model.model_name}: Bought back {current_orders[model.model_name]['amount']} at {last_price}, profit: {income}")
+                    else: #if it was a buy order, we sell
+                        income = last_price*current_orders[model.model_name]["amount"]-current_orders[model.model_name]["spent"]
+                        total_profit[model.model_name]+=income
+                        print(f"Closing {model.model_name}: Sold {current_orders[model.model_name]['amount']} at {last_price}, profit: {income}")
+                    current_orders[model.model_name]=None
+                    main_pd.loc[timestamp,[model.model_name+"_p"]]=income
+                main_pd.loc[timestamp,[model.model_name+"_tp"]]=total_profit[model.model_name]
         if should_write:
-            print(f"Write to csv: {main_pd.iloc[-2]}")
             with open(results_csv_name, 'a') as f:
                 writer = csv.writer(f)
                 row = [
@@ -134,9 +153,34 @@ while True:
                 ]
                 for model in models:
                      row.append(main_pd.iloc[-2][model.model_name])
-                     row.append(main_pd.iloc[-2][model.model_name+"_match"])
-                     row.append(main_pd.iloc[-2][model.model_name+"_hits"])
+                     row.append(main_pd.iloc[-2][model.model_name+"_m"])
+                     row.append(main_pd.iloc[-2][model.model_name+"_h"])
+                     row.append(main_pd.iloc[-2][model.model_name+"_p"])
+                     row.append(main_pd.iloc[-2][model.model_name+"_tp"])
                 writer.writerow(row)
-    print(f"\n\n\n********* Start: {datetime.fromtimestamp(ts_now)}, Candles closed so far: {total_candles-1} , results: {results_csv_name} *********")
-    print(main_pd.tail(15))
+    # predict & open order, if we don't have it already
+    for model in models:
+        index = main_pd.index.values[-1]
+        current_prediction = main_pd.iloc[-1][model.model_name]
+        if np.isnan(current_prediction):
+            prediction = model.predict(main_pd.drop(columns_models, axis=1))
+            main_pd.loc[index,[model.model_name]]=float(prediction)
+            # open order
+            current_orders[model.model_name]= {
+                "direction": float(prediction),
+                "price": last_price, #we buy or sell at last price, need fancy bid/ask
+                "amount": order_size/last_price
+            }
+            current_orders[model.model_name]["spent"]=current_orders[model.model_name]["price"]*current_orders[model.model_name]["amount"]
+            if current_orders[model.model_name]["direction"]==0:
+                print(f"New order on {model.model_name}: Sold {current_orders[model.model_name]['amount']} at {current_orders[model.model_name]['price']}, got {current_orders[model.model_name]['spent']}")
+            else:
+                print(f"New order on {model.model_name}: Bought {current_orders[model.model_name]['amount']} at {current_orders[model.model_name]['price']}, spent {current_orders[model.model_name]['spent']}")
+    
+    print(f"\n\n\n********* Start: {datetime.fromtimestamp(ts_now)}, Order size: {order_size} {quote_token}. Candles closed so far: {total_candles-1} , results: {results_csv_name} *********")
+    
+    #exclude some columns from display
+    
+
+    print(main_pd.loc[:, ~main_pd.columns.isin(['volume','open','high','low'])].tail(15))
     time.sleep(20)
