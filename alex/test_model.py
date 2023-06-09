@@ -112,6 +112,8 @@ while True:
         last_finalized_timestamp = timestamp
         main_pd.loc[timestamp,["diff"]]=(main_pd.iloc[-2]['close']*100/main_pd.iloc[-3]['close'])-100
         should_write = False
+        #get spreads
+        order_books=exchange_ccxt.fetchOrderBook(pair,3)
         for model in models:
             prediction = main_pd.iloc[-2][model.model_name]
             if not np.isnan(prediction):
@@ -128,8 +130,6 @@ while True:
                 main_pd.loc[timestamp,[model.model_name+"_h"]]=round(hits[model.model_name]/(total_candles-1),4)*100
                 # if we have an order, close it
                 if current_orders[model.model_name]:
-                    #get spread
-                    order_books=exchange_ccxt.fetchOrderBook(pair,3)
                     # if it was sell, we need to buy back
                     if current_orders[model.model_name]["direction"]==0:
                         # compute actual price we will get
@@ -181,6 +181,8 @@ while True:
                      row.append(main_pd.iloc[-2][model.model_name+"_p"])
                      row.append(main_pd.iloc[-2][model.model_name+"_tp"])
                 writer.writerow(row)
+    # get order book, in case we need it
+    order_books=exchange_ccxt.fetchOrderBook(pair,3)
     # predict & open order, if we don't have it already
     for model in models:
         index = main_pd.index.values[-1]
@@ -190,8 +192,6 @@ while True:
             main_pd.loc[index,[model.model_name]]=float(prediction)
             # open order
             if current_orders[model.model_name] is None:
-                order_books=exchange_ccxt.fetchOrderBook(pair,3)
-                #print(order_books)
                 if float(prediction)>0:
                     # we buy
                     max_buy_order_size = float(order_books["asks"][0][1])/2 # never buy more than half
