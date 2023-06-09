@@ -130,7 +130,6 @@ while True:
                 if current_orders[model.model_name]:
                     #get spread
                     order_books=exchange_ccxt.fetchOrderBook(pair,3)
-                    print(order_books)
                     # if it was sell, we need to buy back
                     if current_orders[model.model_name]["direction"]==0:
                         # compute actual price we will get
