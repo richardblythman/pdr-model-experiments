@@ -173,6 +173,7 @@ while True:
                     main_pd.iloc[-2]["low"],
                     main_pd.iloc[-2]["close"],
                     main_pd.iloc[-2]["volume"],
+                    main_pd.iloc[-2]["diff"],
                 ]
                 for model in models:
                      row.append(main_pd.iloc[-2][model.model_name])
