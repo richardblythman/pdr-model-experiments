@@ -21,11 +21,13 @@ pair='BTC/TUSD'
 timeframe='5m'
 quote_token='TUSD'
 order_size=100  # order size, in quote token. IE: for BTC/TUSD, it's 100 TUSD
-order_fee = 0.1 # fee, in percentage
+order_fee = 0 # fee, in percentage IE: 0.1 means 0.1% fee
 models = [
     OceanModel(exchange_id,pair,timeframe),
     RichardModel1(exchange_id,pair,timeframe)
 ]
+tp = 0.05 # TakeProfit, in percentage (IE: 0.1%). Ignored if 0
+sl = 0.05 # StopLoss, in percentage.  Ignored if 0
 ## END EDIT ME    
 
 
@@ -39,6 +41,11 @@ exchange_ccxt = exchange_class({
 ts_now=int( time.time() )
 results_csv_name='./results/'+exchange_id+"_"+models[0].pair+"_"+models[0].timeframe+"_"+str(ts_now)+".csv"
 
+
+
+
+
+
 columns_short = [
     "timestamp",
     "open",
@@ -49,7 +56,7 @@ columns_short = [
 ]
 hits={}
 total_profit={}
-current_orders={}
+current_positions={}
 total_candles=0
 columns_models = ['diff']  # percentage difference vs previous candle
 for model in models:
@@ -61,7 +68,7 @@ for model in models:
     columns_models.append(model.model_name+"_p") # profit per candle
     columns_models.append(model.model_name+"_tp") # total profits
     total_profit[model.model_name] = 0
-    current_orders[model.model_name]=None
+    current_positions[model.model_name]=None
 
 all_columns=columns_short+columns_models
 
@@ -76,6 +83,69 @@ if size==0:
      with open(results_csv_name, 'a') as f:
         writer = csv.writer(f)
         writer.writerow(all_columns)
+
+
+def do_order(model_name,pair,type,amount,price,order_books,is_closing_order):
+    order_id = None
+    actual_value = 0
+    actual_price = 0
+    actual_amount = 0
+    actual_fee=0
+
+    if not is_closing_order:
+        if type=='buy':
+                #normal buy
+                max_buy_order_size = float(order_books["asks"][0][1])/2 # never buy more than half
+                actual_amount=min(order_size/last_price,max_buy_order_size)
+                actual_price = float(order_books["asks"][0][0])
+                actual_value = actual_price*actual_amount
+                actual_fee = (actual_value*order_fee/100)
+                actual_value -= actual_fee
+                #TODO - call ccxt
+        else:
+                #normal sell
+                max_sell_order_size = float(order_books["bids"][0][1])/2 # never buy more than half
+                actual_price = float(order_books["bids"][0][0])
+                actual_amount = min(order_size/last_price,max_sell_order_size)
+                actual_value = actual_price*actual_amount
+                actual_fee = (actual_value*order_fee/100)
+                actual_value -= actual_fee
+                #TODO - call ccxt
+    else:
+        #closing orders, the amounts are different
+        if type=='buy':
+            #this is a close sell position
+            remaining = amount
+            actual_value = 0
+            for book in order_books["asks"]:
+                size = min(book[1],remaining)
+                actual_amount+=size
+                actual_value+=book[0]*size
+                remaining-=size
+                if remaining<=0:
+                    break
+            fee= (actual_value*order_fee/100)
+            actual_value-=fee
+            actual_price = actual_value/actual_amount
+            #TODO - call ccxt
+        else:
+            #this is closing a buy position
+            remaining = amount
+            actual_value = 0
+            for book in order_books["bids"]:
+                size = min(book[1],remaining)
+                actual_value+=book[0]*size
+                actual_amount+=size
+                remaining-=size
+                if remaining<=0:
+                    break
+            fee= (actual_value*order_fee/100)
+            actual_value-=fee
+            actual_price = actual_value/actual_amount
+            #TODO - call ccxt
+    print(f"returning ({order_id},{actual_value},{actual_price},{actual_amount},{actual_fee})")
+    return(order_id,actual_value,actual_price,actual_amount,actual_fee)
+
 
 #read initial set of candles
 candles = exchange_ccxt.fetch_ohlcv(pair, "5m")
@@ -107,13 +177,53 @@ while True:
         main_pd.loc[t,['volume']]=float(ohl[5])
     timestamp = main_pd.index.values[-2]
     last_price = main_pd.iloc[-1]['close']
+    #get spreads
+    order_books=exchange_ccxt.fetchOrderBook(pair,3)    
+    #check TP and SL
+    for model in models:
+        if current_positions[model.model_name] is not None:
+            if current_positions[model.model_name]["direction"]==0: #it was a sell position
+                #calculate current profit, for display purpose
+                current_positions[model.model_name]["profit"]=current_positions[model.model_name]["spent"]-current_positions[model.model_name]["amount"]*last_price
+                if current_positions[model.model_name]["tp"]>0 and last_price<=current_positions[model.model_name]["tp"]>0:
+                    #take profit, let's close it..
+                    order_id, actual_value, actual_price, actual_amount, actual_fee = do_order(model.model_name,pair,"buy",current_positions[model.model_name]["amount"],last_price,order_books,True)
+                    profit = current_positions[model.model_name]["spent"]-actual_value
+                    total_profit[model.model_name]+=profit
+                    print(f"TP {model.model_name}: Bought back {current_positions[model.model_name]['amount']} at {last_price}, profit: {profit}")
+                    current_positions[model.model_name]=None
+                if current_positions[model.model_name]["sl"]>0 and last_price>=current_positions[model.model_name]["sl"]>0:
+                    #stop loss, let's close it..
+                    order_id, actual_value, actual_price, actual_amount, actual_fee = do_order(model.model_name,pair,"buy",current_positions[model.model_name]["amount"],last_price,order_books,True)
+                    profit = current_positions[model.model_name]["spent"]-actual_value
+                    total_profit[model.model_name]+=profit
+                    print(f"SL {model.model_name}: Bought back {current_positions[model.model_name]['amount']} at {last_price}, profit: {profit}")
+                    current_positions[model.model_name]=None
+            else: #it was a buy order, so we sell
+                #calculate current profit, for display purpose
+                current_positions[model.model_name]["profit"]=current_positions[model.model_name]["amount"]*last_price-current_positions[model.model_name]["spent"]
+                if current_positions[model.model_name]["tp"]>0 and last_price>=current_positions[model.model_name]["tp"]>0:
+                    #take profit, let's close it..
+                    order_id, actual_value, actual_price, actual_amount, actual_fee = do_order(model.model_name,pair,"sell",current_positions[model.model_name]["amount"],last_price,order_books,True)
+                    profit = actual_value - current_positions[model.model_name]["spent"]
+                    total_profit[model.model_name]+=profit
+                    print(f"TP {model.model_name}: Sold {current_positions[model.model_name]['amount']} at {last_price}, profit: {profit}")
+                    current_positions[model.model_name]=None
+                if current_positions[model.model_name]["sl"]>0 and last_price<=current_positions[model.model_name]["sl"]>0:
+                    #stop loss, let's close it..
+                    order_id, actual_value, actual_price, actual_amount, actual_fee = do_order(model.model_name,pair,"sell",current_positions[model.model_name]["amount"],last_price,order_books,True)
+                    profit = actual_value - current_positions[model.model_name]["spent"]
+                    total_profit[model.model_name]+=profit
+                    print(f"SL {model.model_name}: Sold {current_positions[model.model_name]['amount']} at {last_price}, profit: {profit}")
+                    current_positions[model.model_name]=None
+
+
+    #we have a new candle
     if last_finalized_timestamp<timestamp:
         total_candles+=1
         last_finalized_timestamp = timestamp
         main_pd.loc[timestamp,["diff"]]=(main_pd.iloc[-2]['close']*100/main_pd.iloc[-3]['close'])-100
         should_write = False
-        #get spreads
-        order_books=exchange_ccxt.fetchOrderBook(pair,3)
         for model in models:
             prediction = main_pd.iloc[-2][model.model_name]
             if not np.isnan(prediction):
@@ -129,38 +239,19 @@ while True:
                 # update hits
                 main_pd.loc[timestamp,[model.model_name+"_h"]]=round(hits[model.model_name]/(total_candles-1),4)*100
                 # if we have an order, close it
-                if current_orders[model.model_name]:
+                if current_positions[model.model_name]:
                     # if it was sell, we need to buy back
-                    if current_orders[model.model_name]["direction"]==0:
-                        # compute actual price we will get
-                        # the income calculation is very optimistic when dealing with multiple levels of order books. In reality, you are nowhere near this estimate
-                        remaining = current_orders[model.model_name]["amount"]
-                        income = 0
-                        for book in order_books["asks"]:
-                            size = min(book[1],remaining)
-                            income+=book[0]*size
-                            remaining-=size
-                            if remaining<=0:
-                                break
-                        income -= (income*order_fee/100)
-                        profit = current_orders[model.model_name]["spent"]-income
+                    if current_positions[model.model_name]["direction"]==0:
+                        order_id, actual_value, actual_price, actual_amount, actual_fee = do_order(model.model_name,pair,"buy",current_positions[model.model_name]["amount"],last_price,order_books,True)
+                        profit = current_positions[model.model_name]["spent"]-actual_value
                         total_profit[model.model_name]+=profit
-                        print(f"Closing {model.model_name}: Bought back {current_orders[model.model_name]['amount']} at {last_price}, profit: {profit}")
+                        print(f"Closing {model.model_name}: Bought back {current_positions[model.model_name]['amount']} at {last_price}, profit: {profit}")
                     else: #if it was a buy order, we sell
-                        # the income calculation is very optimistic when dealing with multiple levels of order books. In reality, you are nowhere near this estimate
-                        remaining = current_orders[model.model_name]["amount"]
-                        income = 0
-                        for book in order_books["bids"]:
-                            size = min(book[1],remaining)
-                            income+=book[0]*size
-                            remaining-=size
-                            if remaining<=0:
-                                break
-                        income -= (income*order_fee/100)
-                        profit = income-current_orders[model.model_name]["spent"]
+                        order_id, actual_value, actual_price, actual_amount, actual_fee = do_order(model.model_name,pair,"sell",current_positions[model.model_name]["amount"],last_price,order_books,True)
+                        profit = actual_value-current_positions[model.model_name]["spent"]
                         total_profit[model.model_name]+=profit
-                        print(f"Closing {model.model_name}: Sold {current_orders[model.model_name]['amount']} at {last_price}, profit: {profit}")
-                    current_orders[model.model_name]=None
+                        print(f"Closing {model.model_name}: Sold {current_positions[model.model_name]['amount']} at {last_price}, profit: {profit}")
+                    current_positions[model.model_name]=None
                     main_pd.loc[timestamp,[model.model_name+"_p"]]=profit
                 main_pd.loc[timestamp,[model.model_name+"_tp"]]=total_profit[model.model_name]
         if should_write:
@@ -192,34 +283,51 @@ while True:
             prediction = model.predict(main_pd.drop(columns_models, axis=1))
             main_pd.loc[index,[model.model_name]]=float(prediction)
             # open order
-            if current_orders[model.model_name] is None:
+            if current_positions[model.model_name] is None:
                 if float(prediction)>0:
                     # we buy
-                    max_buy_order_size = float(order_books["asks"][0][1])/2 # never buy more than half
-                    buy_price = float(order_books["asks"][0][0])
-                    current_orders[model.model_name]= {
+                    order_id, actual_value, actual_price, actual_amount, actual_fee = do_order(model.model_name,pair,"buy",None,last_price,order_books,False)
+                    current_positions[model.model_name]= {
                         "direction": 1,
-                        "price": buy_price, #we buy or sell at last price, need fancy bid/ask
-                        "amount": min(order_size/last_price,max_buy_order_size)
+                        "price": actual_price, #we buy or sell at last price, need fancy bid/ask
+                        "amount": actual_amount,
+                        "spent": actual_value,
+                        "tp": 0,
+                        "sl": 0,
+                        "profit":0
                     }
-                    current_orders[model.model_name]["spent"]=current_orders[model.model_name]["price"]*current_orders[model.model_name]["amount"]
-                    print(f"New order on {model.model_name}: Bought {current_orders[model.model_name]['amount']} at {current_orders[model.model_name]['price']}, got {current_orders[model.model_name]['spent']}")
+                    if tp>0:
+                        current_positions[model.model_name]["tp"]=current_positions[model.model_name]["price"]+(current_positions[model.model_name]["price"]*tp/100)
+                    if sl>0:
+                        current_positions[model.model_name]["sl"]=current_positions[model.model_name]["price"]-(current_positions[model.model_name]["price"]*sl/100)
+                    print(f"New buy order on {model.model_name}: {current_positions[model.model_name]}")
                 else:
                     # we sell
-                    max_sell_order_size = float(order_books["bids"][0][1])/2 # never buy more than half
-                    sell_price = float(order_books["bids"][0][0])
-                    current_orders[model.model_name]= {
+                    order_id, actual_value, actual_price, actual_amount, actual_fee = do_order(model.model_name,pair,"sell",None,last_price,order_books,False)
+                    current_positions[model.model_name]= {
                         "direction": 0,
-                        "price": sell_price, #we buy or sell at last price, need fancy bid/ask
-                        "amount": min(order_size/last_price,max_sell_order_size)
+                        "price": actual_price, #we buy or sell at last price, need fancy bid/ask
+                        "amount": actual_amount,
+                        "spent": actual_value,
+                        "tp": 0,
+                        "sl": 0,
+                        "profit":0
                     }
-                    current_orders[model.model_name]["spent"]=current_orders[model.model_name]["price"]*current_orders[model.model_name]["amount"]
-                    print(f"New order on {model.model_name}: Sold {current_orders[model.model_name]['amount']} at {current_orders[model.model_name]['price']}, spent {current_orders[model.model_name]['spent']}")
+                    if tp>0:
+                        current_positions[model.model_name]["tp"]=current_positions[model.model_name]["price"]-(current_positions[model.model_name]["price"]*tp/100)
+                    if sl>0:
+                        current_positions[model.model_name]["sl"]=current_positions[model.model_name]["price"]+(current_positions[model.model_name]["price"]*sl/100)
+                    print(f"New sell order on {model.model_name}: {current_positions[model.model_name]}")
     
     print(f"\n\n\n********* Start: {datetime.fromtimestamp(ts_now)}, Order size: {order_size} {quote_token}. Candles closed so far: {total_candles-1} , results: {results_csv_name} *********")
     
     #exclude some columns from display
-    
-
     print(main_pd.loc[:, ~main_pd.columns.isin(['volume','open','high','low'])].tail(15))
+    print("\n Current positions:\n")
+    for model in models:
+        print(f"{model.model_name} -> {current_positions[model.model_name]}")
     time.sleep(20)
+
+
+
+
