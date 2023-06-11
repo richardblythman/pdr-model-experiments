@@ -290,17 +290,19 @@ while True:
                 # if we have an order, close it
                 if current_positions[model.model_name]:
                     # if it was sell, we need to buy back
-                    if current_positions[model.model_name]["direction"]==0:
+                    if current_positions[model.model_name]["direction"]==0 and float(prediction)>0:
                         order_id, actual_value, actual_price, actual_amount, actual_fee = do_order(model.model_name,pair,"buy",current_positions[model.model_name]["amount"],last_price,order_books,True,'candle_close')
                         profit = current_positions[model.model_name]["spent"]-actual_value
                         total_profit[model.model_name]+=profit
                         print(f"Closing {model.model_name}: Bought back {current_positions[model.model_name]['amount']} at {last_price}, profit: {profit}")
-                    else: #if it was a buy order, we sell
+                        current_positions[model.model_name]=None
+                    elif current_positions[model.model_name]["direction"]==1 and float(prediction)<1:
                         order_id, actual_value, actual_price, actual_amount, actual_fee = do_order(model.model_name,pair,"sell",current_positions[model.model_name]["amount"],last_price,order_books,True,'candle_close')
                         profit = actual_value-current_positions[model.model_name]["spent"]
                         total_profit[model.model_name]+=profit
                         print(f"Closing {model.model_name}: Sold {current_positions[model.model_name]['amount']} at {last_price}, profit: {profit}")
-                    current_positions[model.model_name]=None
+                        current_positions[model.model_name]=None
+                    
                     main_pd.loc[timestamp,[model.model_name+"_p"]]=profit
                 main_pd.loc[timestamp,[model.model_name+"_tp"]]=total_profit[model.model_name]
         if should_write:
