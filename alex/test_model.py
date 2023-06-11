@@ -28,7 +28,7 @@ models = [
 ]
 tp = 0.05 # TakeProfit, in percentage (IE: 0.1%). Ignored if 0
 sl = 0.05 # StopLoss, in percentage.  Ignored if 0
-ACTUAL_DO_TRADE = False  # Set this to true if you actually want to trade. THIS MAY DRAIN YOUR CEX ACCOUNT, don't whine if it does :)
+ACTUAL_DO_TRADE = True  # Set this to true if you actually want to trade. THIS MAY DRAIN YOUR CEX ACCOUNT, don't whine if it does :)
 ## END EDIT ME    
 
 
@@ -241,7 +241,7 @@ while True:
                     total_profit[model.model_name]+=profit
                     print(f"TP {model.model_name}: Bought back {current_positions[model.model_name]['amount']} at {last_price}, profit: {profit}")
                     current_positions[model.model_name]=None
-                if current_positions[model.model_name]["sl"]>0 and last_price>=current_positions[model.model_name]["sl"]>0:
+                elif current_positions[model.model_name]["sl"]>0 and last_price>=current_positions[model.model_name]["sl"]>0:
                     #stop loss, let's close it..
                     order_id, actual_value, actual_price, actual_amount, actual_fee = do_order(model.model_name,pair,"buy",current_positions[model.model_name]["amount"],last_price,order_books,True,'sl')
                     profit = current_positions[model.model_name]["spent"]-actual_value
@@ -258,7 +258,7 @@ while True:
                     total_profit[model.model_name]+=profit
                     print(f"TP {model.model_name}: Sold {current_positions[model.model_name]['amount']} at {last_price}, profit: {profit}")
                     current_positions[model.model_name]=None
-                if current_positions[model.model_name]["sl"]>0 and last_price<=current_positions[model.model_name]["sl"]>0:
+                elif current_positions[model.model_name]["sl"]>0 and last_price<=current_positions[model.model_name]["sl"]>0:
                     #stop loss, let's close it..
                     order_id, actual_value, actual_price, actual_amount, actual_fee = do_order(model.model_name,pair,"sell",current_positions[model.model_name]["amount"],last_price,order_books,True,'sl')
                     profit = actual_value - current_positions[model.model_name]["spent"]
