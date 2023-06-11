@@ -28,7 +28,7 @@ models = [
 ]
 tp = 0.05 # TakeProfit, in percentage (IE: 0.1%). Ignored if 0
 sl = 0.05 # StopLoss, in percentage.  Ignored if 0
-ACTUAL_DO_TRADE = True  # Set this to true if you actually want to trade. THIS MAY DRAIN YOUR CEX ACCOUNT, don't whine if it does :)
+ACTUAL_DO_TRADE = False  # Set this to true if you actually want to trade. THIS MAY DRAIN YOUR CEX ACCOUNT, don't whine if it does :)
 ## END EDIT ME    
 
 
