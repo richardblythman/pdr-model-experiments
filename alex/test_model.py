@@ -28,6 +28,7 @@ models = [
 ]
 tp = 0.05 # TakeProfit, in percentage (IE: 0.1%). Ignored if 0
 sl = 0.05 # StopLoss, in percentage.  Ignored if 0
+ACTUAL_DO_TRADE = False  # Set this to true if you actually want to trade. THIS MAY DRAIN YOUR CEX ACCOUNT, don't whine if it does :)
 ## END EDIT ME    
 
 
@@ -84,6 +85,15 @@ if size==0:
         writer = csv.writer(f)
         writer.writerow(all_columns)
 
+def do_cex_order(pair,type,side,amount,price):
+    order_id=None
+    if ACTUAL_DO_TRADE:
+        try:
+            order_ccxt = exchange_ccxt.createOrder(symbol=pair,type=type,side=side,amount=amount,price=price)
+            order_id=order_ccxt['id']
+        except Exception as e:
+            print(e)
+    return order_id
 
 def do_order(model_name,pair,type,amount,price,order_books,is_closing_order):
     order_id = None
@@ -101,7 +111,7 @@ def do_order(model_name,pair,type,amount,price,order_books,is_closing_order):
                 actual_value = actual_price*actual_amount
                 actual_fee = (actual_value*order_fee/100)
                 actual_value -= actual_fee
-                #TODO - call ccxt
+                order_id = do_cex_order(pair,"limit",'buy',actual_amount,actual_price)
         else:
                 #normal sell
                 max_sell_order_size = float(order_books["bids"][0][1])/2 # never buy more than half
@@ -110,31 +120,35 @@ def do_order(model_name,pair,type,amount,price,order_books,is_closing_order):
                 actual_value = actual_price*actual_amount
                 actual_fee = (actual_value*order_fee/100)
                 actual_value -= actual_fee
-                #TODO - call ccxt
+                order_id = do_cex_order(pair,"limit",'sell',actual_amount,actual_price)
     else:
         #closing orders, the amounts are different
         if type=='buy':
             #this is a close sell position
             remaining = amount
             actual_value = 0
+            bprice = 0
             for book in order_books["asks"]:
                 size = min(book[1],remaining)
                 actual_amount+=size
                 actual_value+=book[0]*size
+                bprice = book[0]
                 remaining-=size
                 if remaining<=0:
                     break
             fee= (actual_value*order_fee/100)
             actual_value-=fee
             actual_price = actual_value/actual_amount
-            #TODO - call ccxt
+            order_id = do_cex_order(pair,"limit",'buy',actual_amount,bprice)
         else:
             #this is closing a buy position
             remaining = amount
             actual_value = 0
+            bprice = 0
             for book in order_books["bids"]:
                 size = min(book[1],remaining)
                 actual_value+=book[0]*size
+                bprice = book[0]
                 actual_amount+=size
                 remaining-=size
                 if remaining<=0:
@@ -142,7 +156,7 @@ def do_order(model_name,pair,type,amount,price,order_books,is_closing_order):
             fee= (actual_value*order_fee/100)
             actual_value-=fee
             actual_price = actual_value/actual_amount
-            #TODO - call ccxt
+            order_id = do_cex_order(pair,"limit",'sell',actual_amount,bprice)
     #print(f"returning ({order_id},{actual_value},{actual_price},{actual_amount},{actual_fee})")
     return(order_id,actual_value,actual_price,actual_amount,actual_fee)
 
