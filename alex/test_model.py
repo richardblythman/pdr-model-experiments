@@ -143,7 +143,7 @@ def do_order(model_name,pair,type,amount,price,order_books,is_closing_order):
             actual_value-=fee
             actual_price = actual_value/actual_amount
             #TODO - call ccxt
-    print(f"returning ({order_id},{actual_value},{actual_price},{actual_amount},{actual_fee})")
+    #print(f"returning ({order_id},{actual_value},{actual_price},{actual_amount},{actual_fee})")
     return(order_id,actual_value,actual_price,actual_amount,actual_fee)
 
 
