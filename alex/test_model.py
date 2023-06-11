@@ -41,7 +41,7 @@ exchange_ccxt = exchange_class({
 
 ts_now=int( time.time() )
 results_csv_name='./results/'+exchange_id+"_"+models[0].pair+"_"+models[0].timeframe+"_"+str(ts_now)+".csv"
-
+orders_csv_name='./results/'+exchange_id+"_"+models[0].pair+"_"+models[0].timeframe+"_"+str(ts_now)+"_orders.csv"
 
 
 
@@ -73,7 +73,7 @@ for model in models:
 
 all_columns=columns_short+columns_models
 
-#write csv header
+#write csv header for results
 size = 0
 try:
     files_stats=os.stat(results_csv_name)
@@ -85,6 +85,18 @@ if size==0:
         writer = csv.writer(f)
         writer.writerow(all_columns)
 
+#write csv header for orders log
+size = 0
+try:
+    files_stats=os.stat(orders_csv_name)
+    size = files_stats.st_size
+except:
+    pass
+if size==0:
+     with open(orders_csv_name, 'a') as f:
+        writer = csv.writer(f)
+        writer.writerow(['model','pair','type','direction','amount','price','order_id','reason'])
+
 def do_cex_order(pair,type,side,amount,price):
     order_id=None
     if ACTUAL_DO_TRADE:
@@ -95,13 +107,18 @@ def do_cex_order(pair,type,side,amount,price):
             print(e)
     return order_id
 
-def do_order(model_name,pair,type,amount,price,order_books,is_closing_order):
+def do_order(model_name,pair,type,amount,price,order_books,is_closing_order, reason):
     order_id = None
     actual_value = 0
     actual_price = 0
     actual_amount = 0
     actual_fee=0
 
+    #for logging
+    ccxt_type='limit'
+    ccxt_direction=None
+    ccxt_amount=0
+    ccxt_price=0
     if not is_closing_order:
         if type=='buy':
                 #normal buy
@@ -111,7 +128,10 @@ def do_order(model_name,pair,type,amount,price,order_books,is_closing_order):
                 actual_value = actual_price*actual_amount
                 actual_fee = (actual_value*order_fee/100)
                 actual_value -= actual_fee
-                order_id = do_cex_order(pair,"limit",'buy',actual_amount,actual_price)
+                ccxt_direction='buy'
+                ccxt_amount = actual_amount
+                ccxt_price = actual_price
+                order_id = do_cex_order(pair,"limit",ccxt_direction,ccxt_amount,ccxt_price)
         else:
                 #normal sell
                 max_sell_order_size = float(order_books["bids"][0][1])/2 # never buy more than half
@@ -120,7 +140,11 @@ def do_order(model_name,pair,type,amount,price,order_books,is_closing_order):
                 actual_value = actual_price*actual_amount
                 actual_fee = (actual_value*order_fee/100)
                 actual_value -= actual_fee
-                order_id = do_cex_order(pair,"limit",'sell',actual_amount,actual_price)
+                ccxt_direction='sell'
+                ccxt_amount = actual_amount
+                ccxt_price = actual_price
+                order_id = do_cex_order(pair,"limit",ccxt_direction,ccxt_amount,ccxt_price)
+                
     else:
         #closing orders, the amounts are different
         if type=='buy':
@@ -139,7 +163,10 @@ def do_order(model_name,pair,type,amount,price,order_books,is_closing_order):
             fee= (actual_value*order_fee/100)
             actual_value-=fee
             actual_price = actual_value/actual_amount
-            order_id = do_cex_order(pair,"limit",'buy',actual_amount,bprice)
+            ccxt_direction='buy'
+            ccxt_amount = actual_amount
+            ccxt_price = bprice
+            order_id = do_cex_order(pair,"limit",ccxt_direction,ccxt_amount,ccxt_price)
         else:
             #this is closing a buy position
             remaining = amount
@@ -156,8 +183,16 @@ def do_order(model_name,pair,type,amount,price,order_books,is_closing_order):
             fee= (actual_value*order_fee/100)
             actual_value-=fee
             actual_price = actual_value/actual_amount
-            order_id = do_cex_order(pair,"limit",'sell',actual_amount,bprice)
+            ccxt_direction='sell'
+            ccxt_amount = actual_amount
+            ccxt_price = bprice
+            order_id = do_cex_order(pair,"limit",ccxt_direction,ccxt_amount,ccxt_price)
     #print(f"returning ({order_id},{actual_value},{actual_price},{actual_amount},{actual_fee})")
+    #log orders
+    with open(orders_csv_name, 'a') as f:
+                writer = csv.writer(f)
+                writer.writerow([])
+                writer.writerow([model_name,pair,ccxt_type,ccxt_direction,ccxt_amount,ccxt_price,order_id,reason])
     return(order_id,actual_value,actual_price,actual_amount,actual_fee)
 
 
@@ -201,14 +236,14 @@ while True:
                 current_positions[model.model_name]["profit"]=current_positions[model.model_name]["spent"]-current_positions[model.model_name]["amount"]*last_price
                 if current_positions[model.model_name]["tp"]>0 and last_price<=current_positions[model.model_name]["tp"]>0:
                     #take profit, let's close it..
-                    order_id, actual_value, actual_price, actual_amount, actual_fee = do_order(model.model_name,pair,"buy",current_positions[model.model_name]["amount"],last_price,order_books,True)
+                    order_id, actual_value, actual_price, actual_amount, actual_fee = do_order(model.model_name,pair,"buy",current_positions[model.model_name]["amount"],last_price,order_books,True,'tp')
                     profit = current_positions[model.model_name]["spent"]-actual_value
                     total_profit[model.model_name]+=profit
                     print(f"TP {model.model_name}: Bought back {current_positions[model.model_name]['amount']} at {last_price}, profit: {profit}")
                     current_positions[model.model_name]=None
                 if current_positions[model.model_name]["sl"]>0 and last_price>=current_positions[model.model_name]["sl"]>0:
                     #stop loss, let's close it..
-                    order_id, actual_value, actual_price, actual_amount, actual_fee = do_order(model.model_name,pair,"buy",current_positions[model.model_name]["amount"],last_price,order_books,True)
+                    order_id, actual_value, actual_price, actual_amount, actual_fee = do_order(model.model_name,pair,"buy",current_positions[model.model_name]["amount"],last_price,order_books,True,'sl')
                     profit = current_positions[model.model_name]["spent"]-actual_value
                     total_profit[model.model_name]+=profit
                     print(f"SL {model.model_name}: Bought back {current_positions[model.model_name]['amount']} at {last_price}, profit: {profit}")
@@ -218,14 +253,14 @@ while True:
                 current_positions[model.model_name]["profit"]=current_positions[model.model_name]["amount"]*last_price-current_positions[model.model_name]["spent"]
                 if current_positions[model.model_name]["tp"]>0 and last_price>=current_positions[model.model_name]["tp"]>0:
                     #take profit, let's close it..
-                    order_id, actual_value, actual_price, actual_amount, actual_fee = do_order(model.model_name,pair,"sell",current_positions[model.model_name]["amount"],last_price,order_books,True)
+                    order_id, actual_value, actual_price, actual_amount, actual_fee = do_order(model.model_name,pair,"sell",current_positions[model.model_name]["amount"],last_price,order_books,True,'tp')
                     profit = actual_value - current_positions[model.model_name]["spent"]
                     total_profit[model.model_name]+=profit
                     print(f"TP {model.model_name}: Sold {current_positions[model.model_name]['amount']} at {last_price}, profit: {profit}")
                     current_positions[model.model_name]=None
                 if current_positions[model.model_name]["sl"]>0 and last_price<=current_positions[model.model_name]["sl"]>0:
                     #stop loss, let's close it..
-                    order_id, actual_value, actual_price, actual_amount, actual_fee = do_order(model.model_name,pair,"sell",current_positions[model.model_name]["amount"],last_price,order_books,True)
+                    order_id, actual_value, actual_price, actual_amount, actual_fee = do_order(model.model_name,pair,"sell",current_positions[model.model_name]["amount"],last_price,order_books,True,'sl')
                     profit = actual_value - current_positions[model.model_name]["spent"]
                     total_profit[model.model_name]+=profit
                     print(f"SL {model.model_name}: Sold {current_positions[model.model_name]['amount']} at {last_price}, profit: {profit}")
@@ -256,12 +291,12 @@ while True:
                 if current_positions[model.model_name]:
                     # if it was sell, we need to buy back
                     if current_positions[model.model_name]["direction"]==0:
-                        order_id, actual_value, actual_price, actual_amount, actual_fee = do_order(model.model_name,pair,"buy",current_positions[model.model_name]["amount"],last_price,order_books,True)
+                        order_id, actual_value, actual_price, actual_amount, actual_fee = do_order(model.model_name,pair,"buy",current_positions[model.model_name]["amount"],last_price,order_books,True,'candle_close')
                         profit = current_positions[model.model_name]["spent"]-actual_value
                         total_profit[model.model_name]+=profit
                         print(f"Closing {model.model_name}: Bought back {current_positions[model.model_name]['amount']} at {last_price}, profit: {profit}")
                     else: #if it was a buy order, we sell
-                        order_id, actual_value, actual_price, actual_amount, actual_fee = do_order(model.model_name,pair,"sell",current_positions[model.model_name]["amount"],last_price,order_books,True)
+                        order_id, actual_value, actual_price, actual_amount, actual_fee = do_order(model.model_name,pair,"sell",current_positions[model.model_name]["amount"],last_price,order_books,True,'candle_close')
                         profit = actual_value-current_positions[model.model_name]["spent"]
                         total_profit[model.model_name]+=profit
                         print(f"Closing {model.model_name}: Sold {current_positions[model.model_name]['amount']} at {last_price}, profit: {profit}")
@@ -300,7 +335,7 @@ while True:
             if current_positions[model.model_name] is None:
                 if float(prediction)>0:
                     # we buy
-                    order_id, actual_value, actual_price, actual_amount, actual_fee = do_order(model.model_name,pair,"buy",None,last_price,order_books,False)
+                    order_id, actual_value, actual_price, actual_amount, actual_fee = do_order(model.model_name,pair,"buy",None,last_price,order_books,False,'new_candle')
                     current_positions[model.model_name]= {
                         "direction": 1,
                         "price": actual_price, #we buy or sell at last price, need fancy bid/ask
@@ -317,7 +352,7 @@ while True:
                     print(f"New buy order on {model.model_name}: {current_positions[model.model_name]}")
                 else:
                     # we sell
-                    order_id, actual_value, actual_price, actual_amount, actual_fee = do_order(model.model_name,pair,"sell",None,last_price,order_books,False)
+                    order_id, actual_value, actual_price, actual_amount, actual_fee = do_order(model.model_name,pair,"sell",None,last_price,order_books,False,'new_candle')
                     current_positions[model.model_name]= {
                         "direction": 0,
                         "price": actual_price, #we buy or sell at last price, need fancy bid/ask
