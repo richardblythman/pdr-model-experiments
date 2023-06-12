@@ -6,10 +6,14 @@ This repository contain several experiments that aim to create a model that do b
 ### Alex experiments
 [Here](https://github.com/oceanprotocol/pdr-model-experiments/blob/main/alex/README.md)
 
-### Legend for table
+### Example Table
+
+<img src="images/example-table.png"/>
+
+Legend:
 ```text
 close = close price for candle
-diff= difference in percent vs last candle close price
+diff = difference in percent vs last candle close price
 OceanModel = prediction done by Jaime's model
 OceanModel_m = if the prediction was accurate
 OceanModel_h = hit rate (accuracy)
