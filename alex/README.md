@@ -1,5 +1,5 @@
-# Predictor-Model-Experiments
-Predictor-Model-Experiments
+# Predictoor-Model-Experiments
+Predictoor-Model-Experiments
 
 This folder tries to create an infrastructure to train and test models
 
