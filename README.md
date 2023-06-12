@@ -2,3 +2,5 @@
 Predictor-Model-Experiments
 
 This repository contain several experiments that aim to create a model that do better than random guess at predicting ETH prices
+
+[Alex experiments](https://github.com/oceanprotocol/pdr-model-experiments/blob/main/alex/README.md)
