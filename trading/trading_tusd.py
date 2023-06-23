@@ -13,10 +13,11 @@ import time
 import warnings
 from binance.spot import Spot
 import os
+from datetime import datetime, timezone
 
 warnings.filterwarnings("ignore")
 
-model_name = "btc_tusd"
+model_name = "btc_tusd_hgbc"
 with open(model_name + ".pkl", "rb") as f:
     model = pickle.load(f)
 
@@ -126,28 +127,32 @@ def sell(symbol, client, quantity):
 
 
 def summary(log):
-    profit_cash = log["profit_cash"]
-    profit_percent = log["profit_percent"]
-    print(
-        f"Global results. Profit ${round(profit_cash,4)} ({round(profit_percent,4)}%)"
-    )
+    profit_cash = round(log["profit_cash"], 4)
+    profit_percent = round(log["profit_percent"], 4)
+    acc = 0
+    if log["total_candles"] > 0:
+        acc = log["total_correct"] / log["total_candles"]
+    print(f"Global results. Profit ${profit_cash} ({profit_percent}%), Accuracy {acc}")
 
 
-# TEST
 API_KEY = os.environ.get("API_KEY")
 API_SECRET = os.environ.get("API_SECRET")
-client = Spot(api_key=API_KEY, api_secret=API_SECRET)
+print(API_KEY, API_SECRET)
+client = Spot(
+    api_key=API_KEY, api_secret=API_SECRET, base_url="https://testnet.binance.vision"
+)
 symbol = "BTCUSDT"
-amount_usd = 100
-
+amount_usd = 1000
 account = client.account()
 # %%
 log = {
-    "yhat": None,
+    "yhat": 0,
     "spent": None,
     "amt_purchased": None,
     "profit_percent": 0,
     "profit_cash": 0,
+    "total_candles": 0,
+    "total_correct": 0,
     "isNew": True,
 }
 
@@ -157,17 +162,28 @@ while True:
     i = i + 1
     # Get klines of BTCUSDT at 5m interval
     data = client.klines(symbol, "5m", limit=100)
-    asset_data = pd.DataFrame(data, columns=columns)
-    asset_data = asset_data.drop(["none", "close_time"], axis=1)
+    data = pd.DataFrame(data, columns=columns)
+    asset_data = data.drop(["none", "close_time"], axis=1)
     asset_data = asset_data.set_index("timestamp")
     asset_data = asset_data.select_dtypes(include=["object", "int"]).astype(float)
     asset_data = add_ta(asset_data)
+    r = asset_data["close"].diff() / asset_data["close"]
+    asset_data = asset_data.diff()
+    asset_data["r"] = r
     asset_data = asset_data.dropna()
 
     if asset_data.index[-1] > latest_timestamp:
         print("New candle")
         latest_timestamp = asset_data.index[-1]
-        yhat = model.predict(asset_data.values[[-1], :])
+        yhat = model.predict(asset_data.values[[-2], :])[0]
+        print(f"Predicted: {yhat}, close_diff {asset_data.values[-2, 3]}")
+
+        # record accuracy
+        log["total_candles"] = log["total_candles"] + 1
+        y = 1 if asset_data.values[-2, 3] > 0 else 0
+        if y == log["yhat"]:
+            log["total_correct"] = log["total_correct"] + 1
+
         if yhat == 1 and log["isNew"] == True:
             new_event = True
             print("Buy")
@@ -189,13 +205,12 @@ while True:
 
             log.update(
                 {
-                    "yhat": None,
+                    "yhat": 0,
                     "spent": None,
                     "amt_purchased": None,
                     "isNew": True,
                 }
             )
-            summary(log)
         else:
             new_event = False
             # print("Do Nothing")
@@ -207,14 +222,14 @@ while True:
         profit_usd = price * log["amt_purchased"] - log["spent"]
         profit_percent = 100 * (profit_usd / log["spent"])
         print(f"current candle. Profit {profit_usd} ({profit_percent})")
-        summary(log)
 
     else:
         if new_event:
             print("No active trades")
             new_event = False
 
-    time.sleep(20)
+    summary(log)
+    time.sleep(10)
 
 
 # %%
