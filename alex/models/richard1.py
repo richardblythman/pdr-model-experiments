@@ -42,15 +42,18 @@ class RichardModel1:
             volume="volume",
             fillna=True,
         )
+        df['volume_adi_diff'] = df['volume_adi'].diff() 
+        df['volume_obv_diff'] = df['volume_obv'].diff() 
+        df['volume_nvi_diff'] = df['volume_nvi'].pct_change() 
         df = self.get_time_features(df)
-        df = df.drop(["timestamp"], axis=1)
+        df = df.drop(["timestamp", 'volume_adi', 'volume_obv', 'volume_nvi', 'others_cr'], axis=1)
         return df
 
     def get_time_features(self,df):
         df = df.assign(sin_month=np.zeros(len(df)), cos_month=np.zeros(len(df)), sin_day=np.zeros(len(df)), cos_day=np.zeros(len(df)), sin_hour=np.zeros(len(df)), cos_hour=np.zeros(len(df)), sin_minute=np.zeros(len(df)), cos_minute=np.zeros(len(df)),)
         time_features = np.zeros((len(df),8))
         for i in range(len(time_features)):
-            datetime = pd.to_datetime(df.index[i],utc=True)
+            datetime = pd.to_datetime(df.index[i],unit="s",utc=True)
             time_features[i,0] = (np.sin(2 * np.pi * datetime.month/12))
             time_features[i,1] = (np.cos(2 * np.pi * datetime.month/12))
             time_features[i,2] = (np.sin(2 * np.pi * datetime.day/31))
@@ -114,18 +117,17 @@ class RichardModel1:
         
     
     def predict(self,last_candles):
-        main_pd = self.add_ta(last_candles)
-
+        main_pd_features = self.add_ta(last_candles)
         pred_list = np.zeros((self.n_fold,))
         conf_list = np.zeros((self.n_fold,))
         for split in range(self.n_fold):
-            predict = self.model[split].predict(main_pd.values[[-1], :]) 
-            pred_list[split] = predict.argmax(axis=1)[0]
+            predict = self.model[split].predict(main_pd_features.values[[-2], :]) 
+            pred_list[split] = predict.argmax(axis=1)
             conf_list[split] = predict[:,1][0] 
         pred = np.median(pred_list, axis=0)    
         conf = np.median(conf_list, axis=0)    
 
-        return pred   
+        return pred, main_pd_features.values[[-2], :]
 
     def pickle_model(self,path):
         for split in range(self.n_fold):
